@@ -1,18 +1,39 @@
-import requests
 import json
-from bs4 import BeautifulSoup
+import datetime
+import requests
 from structure import *
+from bs4 import BeautifulSoup
+from time import mktime, strptime
+FAULTLIMIT = 64
+
 
 def login(sess, username="", password=""):
-    html = sess.get("http://bookseat.tkblearning.com.tw/book-seat/student/bookSeat/index").text
-    bsobj = BeautifulSoup(html, "lxml")
-    token = bsobj.find("input", {"name": "access_token"}).attrs["value"]
-    payload = {"access_token": token, "toURL": "/student/bookSeat/index", "id": username, "pwd": password}
-    status = sess.post("http://bookseat.tkblearning.com.tw/book-seat/student/login/login", allow_redirects=False, data=payload).status_code
-    if status == 302:
-        return True
-    else:
+    try:
+        html = sess.get("http://bookseat.tkblearning.com.tw/book-seat/student/bookSeat/index").text
+        bsobj = BeautifulSoup(html, "lxml")
+        token = bsobj.find("input", {"name": "access_token"}).attrs["value"]
+        payload = {"access_token": token, "toURL": "/student/bookSeat/index", "id": username, "pwd": password}
+        status = sess.post("http://bookseat.tkblearning.com.tw/book-seat/student/login/login", allow_redirects=False,
+                           data=payload).status_code
+        if status == 302:
+            return True
+        else:
+            return False
+    except requests.exceptions.Timeout:
         return False
+
+
+def getbooktoken(sess):
+    fault = 0
+    while fault < FAULTLIMIT:
+        try:
+            html = sess.get("http://bookseat.tkblearning.com.tw/book-seat/student/bookSeat/index").text
+            token = html.split('access_token : \"')[1].split('\"')[0]
+            return TokenResponse.OK, token
+        except:
+            fault += 1
+            continue
+    return TokenResponse.FAIL, None
 
 
 def getclass(sess):
@@ -29,7 +50,8 @@ def getclass(sess):
 def getdate(sess, classid, expiredate):
     try:
         payload = {"effectiveDate": expiredate, "class_data": classid, "class_status": "T"}
-        html = sess.post("http://bookseat.tkblearning.com.tw/book-seat/student/bookSeat/canBookseatDate", data=payload).text
+        html = sess.post("http://bookseat.tkblearning.com.tw/book-seat/student/bookSeat/canBookseatDate",
+                         data=payload).text
         jsondata = json.loads(html)
         data = [BookingDate(d) for d in jsondata]
         return data
@@ -92,20 +114,23 @@ def checkavailable(sess, branchid, classid, date, timearr):
     return CheckingResponse.OK
 
 
-def booking(sess, branchid, classid, date, timearr):
-    if not checkavailable(sess, branchid, classid, date, timearr):
+def booking(sess, branchid, classid, date, timearr, token="", nocheck=False):
+    if not (nocheck or checkavailable(sess, branchid, classid, date, timearr)):
         return BookingResponse.NOTAVAILABLE
-    html = sess.get("http://bookseat.tkblearning.com.tw/book-seat/student/bookSeat/index").text
-    try:
-        token = html.split('access_token : \"')[1].split('\"')[0]
-    except:
-        return BookingResponse.FAIL
-
+    if token == "":  # no token provided in advance
+        result = getbooktoken(sess)
+        if result[0] == TokenResponse.OK:
+            token = result[1]
+        else:
+            return BookingResponse.FAIL
     payload = [("access_token", token), ("class_data", classid), ("date", date), ("branch_no", branchid)]
     for time in timearr:
         payload.append(("session_time[]", str(time)))
-    html = sess.post("http://bookseat.tkblearning.com.tw/book-seat/student/bookSeat/book", data=tuple(payload))
-    
+    try:
+        html = sess.post("http://bookseat.tkblearning.com.tw/book-seat/student/bookSeat/book", timeout=180,
+                         data=tuple(payload))
+    except requests.exceptions.Timeout:
+        return BookingResponse.TIMEOUT
     if html.status_code == 200:
         jsondata = json.loads(html.text)
         if jsondata["STATUS"] == "1" and jsondata["MESSAGE"] == "預約成功":
@@ -114,3 +139,13 @@ def booking(sess, branchid, classid, date, timearr):
             return BookingResponse.NOCONTINOUS
     else:
         return BookingResponse.FAIL
+
+
+def getserverdelay():
+    try:
+        nowstamp = datetime.datetime.utcnow().timestamp()
+        serverdate = requests.get('http://bookseat.tkblearning.com.tw/book-seat/student/bookSeat/index').headers['Date']
+        serverstamp = mktime(strptime(serverdate, "%a, %d %b %Y %H:%M:%S %Z"))
+        return serverstamp-nowstamp
+    except:
+        return 0
