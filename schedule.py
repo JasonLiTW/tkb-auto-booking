@@ -16,6 +16,7 @@ parser = argparse.ArgumentParser(description="TKB AutoBooking Script.")
 parser.add_argument("--account", "-a", required=True, help="Account(ID Number)")
 parser.add_argument("--password", "-p", required=True, help="Password")
 parser.add_argument("--txtpath", "-t", required=True, help="Path of task.txt")
+parser.add_argument("--nocheck", "-n", required=False, default=False, action='store_true')
 args = parser.parse_args()
 print(AsciiArt.logo)
 fault, delay = 0, 0
@@ -72,7 +73,7 @@ if targetstr in task:
         else:
             time.sleep(0.1)
     while fault < FAULTLIMIT:  # booking loop
-        result = booking(session, data[0], data[1], targetstr, data[2], token=token, nocheck=True)
+        result = booking(session, data[0], data[1], targetstr, data[2], token=token, nocheck=args.nocheck)
         if result == BookingResponse.OK:
             timeprint("預約成功.")
             print(AsciiArt.success)
