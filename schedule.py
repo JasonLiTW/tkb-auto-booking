@@ -82,9 +82,9 @@ if targetstr in task:
             timeprint(result.value)
             fault += 1
     timeprint("開始取得學堂預約狀況...")
-    time = gettime(session, data[0], targetstr)
-    for time in time:
-        time.print()
+    scheduletime = gettime(session, data[0], targetstr)
+    for t in scheduletime:
+        t.print()
 else:
     timeprint("持續地登入失敗 或 預計預約日未排程 -> {:s}.".format(targetstr))
 timeprint("按Enter結束...")

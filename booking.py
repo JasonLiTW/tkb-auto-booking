@@ -104,8 +104,8 @@ def checkavailable(sess, branchid, classid, date, timearr):
     if not checkdate:
         return CheckingResponse.DATENOTREACHABLE
 
-    time = gettime(sess, branchid, date)
-    timeok = set([t.value for t in time if t.reserved == "0" and t.remaining != "0"])
+    scheduletime = gettime(sess, branchid, date)
+    timeok = set([t.value for t in scheduletime if t.reserved == "0" and t.remaining != "0"])
     for t in timearr:
         if t not in timeok:
             checktime = False
@@ -124,8 +124,8 @@ def booking(sess, branchid, classid, date, timearr, token="", nocheck=False):
         else:
             return BookingResponse.FAIL
     payload = [("access_token", token), ("class_data", classid), ("date", date), ("branch_no", branchid)]
-    for time in timearr:
-        payload.append(("session_time[]", str(time)))
+    for t in timearr:
+        payload.append(("session_time[]", str(t)))
     try:
         html = sess.post("http://bookseat.tkblearning.com.tw/book-seat/student/bookSeat/book", timeout=180,
                          data=tuple(payload))
